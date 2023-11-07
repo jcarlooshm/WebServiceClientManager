@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>WebServiceClientManager</Title>
+    <Authors>Juan Carlos Hernández Martínez</Authors>
+    <Description>Biblioteca de solicitudes HTTP para consumir servicios web y APIs basados en REST. 
+Utiliza operaciones como GET, POST, PUT y DELETE
+</Description>
   </PropertyGroup>
 
   <ItemGroup>
