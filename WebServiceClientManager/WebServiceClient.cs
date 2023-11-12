@@ -27,10 +27,19 @@ namespace WebServiceClientManager
         public string AuthorizationType { get; set; } = "Bearer";
         private HttpClient _httpClient;
 
+        private readonly ITokenManager _tokenManager;
+
         public WebServiceClient(string baseUrl)
         {
             this._baseUri = baseUrl;
             this._httpClient = new HttpClient();
+        }
+
+        public WebServiceClient(string baseUrl, ITokenManager tokenManager)
+        {
+            this._baseUri = baseUrl;
+            this._httpClient = new HttpClient();
+            _tokenManager = tokenManager;
         }
 
         public WebServiceClient(string baseUri, string authorizationToken)
@@ -176,6 +185,7 @@ namespace WebServiceClientManager
                                 var token = methodToRefreshToken();
                                 if (!string.IsNullOrEmpty(token))
                                 {
+                                    _tokenManager.SetToken(token);
                                     _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
                                     SetAuthorizationToken(token);
                                     hasRetried = true;
@@ -246,6 +256,7 @@ namespace WebServiceClientManager
                                 var token = await methodToRefreshTokenAsync();
                                 if (!string.IsNullOrEmpty(token))
                                 {
+                                    _tokenManager.SetToken(token);
                                     _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
                                     SetAuthorizationToken(token);
                                     hasRetried = true;
@@ -341,7 +352,6 @@ namespace WebServiceClientManager
                     throw new ArgumentException("Tipo de contenido no admitido");
             }
         }
-
 
         private string GetMessageFromException(Exception ex)
         {
