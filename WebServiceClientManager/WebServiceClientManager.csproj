@@ -8,6 +8,7 @@
     <Description>Biblioteca de solicitudes HTTP para consumir servicios web y APIs basados en REST. 
 Utiliza operaciones como GET, POST, PUT y DELETE
 </Description>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>

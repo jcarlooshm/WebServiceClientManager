@@ -23,6 +23,6 @@ namespace WebServiceClientManager.Interfaces
         ClientResponse<TResponse> Put<TResponse>(string endpoint, object content, EContentType contentType);
         Task<ClientResponse<TResponse>> PutAsync<TResponse>(string endpoint, object content, EContentType contentType);
         void SetAuthorizationToken(string authorizationToken);
-        void SetTokenRefreshFunc(Func<Task<string>> refreshFunc);
+        void MethodToRefreshTokenAsync(Func<Task<string>> refreshFunc);
     }
 }

@@ -19,7 +19,11 @@ namespace WebServiceClientManager
         private HttpClient _httpClient;
         private string _baseUri;
         private string _authorizationToken;
-        private Func<Task<string>> tokenRefreshFuncAsync;
+
+        private Func<string> methodToRefreshToken;
+        private Func<Task<string>> methodToRefreshTokenAsync;
+
+
         public event Action<HttpResponseMessage> UnauthorizedResponseReceived;
         public event Action<HttpResponseMessage> UnauthorizedRetriedResponseReceived;
 
@@ -49,36 +53,40 @@ namespace WebServiceClientManager
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _authorizationToken);
         }
 
-
-        public void SetTokenRefreshFunc(Func<Task<string>> refreshFunc)
+        public void MethodToRefreshToken(Func<string> methodToRefreshToken)
         {
-            this.tokenRefreshFuncAsync = refreshFunc;
+            this.methodToRefreshToken = methodToRefreshToken;
+        }
+
+        public void MethodToRefreshTokenAsync(Func<Task<string>> methodToRefreshTokenAsync)
+        {
+            this.methodToRefreshTokenAsync = methodToRefreshTokenAsync;
         }
 
         //Metodos sincronos
         public ClientResponse<TResponse> Get<TResponse>(string endpoint)
         {
-            return GetAsync<TResponse>(endpoint).Result;
+            return SendRequest<TResponse>(endpoint, HttpMethod.Get, null, EContentType.application_json);
         }
 
         public ClientResponse<TResponse> Post<TResponse>(string endpoint, object content, EContentType contentType)
         {
-            return PostAsync<TResponse>(endpoint, content, contentType).Result;
+            return SendRequest<TResponse>(endpoint, HttpMethod.Post, content, contentType);
         }
 
         public ClientResponse<TResponse> Put<TResponse>(string endpoint, object content, EContentType contentType)
         {
-            return PutAsync<TResponse>(endpoint, content, contentType).Result;
+            return SendRequest<TResponse>(endpoint, HttpMethod.Put, content, contentType);
         }
 
         public ClientResponse<TResponse> Delete<TResponse>(string endpoint)
         {
-            return DeleteAsync<TResponse>(endpoint).Result;
+            return SendRequest<TResponse>(endpoint, HttpMethod.Delete, null, EContentType.application_json);
         }
 
         public ClientResponse<TResponse> Patch<TResponse>(string endpoint, object content, EContentType contentType)
         {
-            return PatchAsync<TResponse>(endpoint, content, contentType).Result;
+            return SendRequest<TResponse>(endpoint, new HttpMethod("PATCH"), content, contentType);
         }
 
 
@@ -108,6 +116,76 @@ namespace WebServiceClientManager
             return await SendRequestAsync<TResponse>(endpoint, new HttpMethod("PATCH"), content, contentType);
         }
 
+        private ClientResponse<TResponse> SendRequest<TResponse>(string endpoint, HttpMethod method, object content, EContentType contentType)
+        {
+            ClientResponse<TResponse> responseManager = new ClientResponse<TResponse>();
+            bool hasRetried = false;
+
+            try
+            {
+                var request = new HttpRequestMessage(method, _baseUri + endpoint);
+
+                if (content != null)
+                {
+                    HttpContent serializedContent = CreateHttpContent(content, contentType);
+                    request.Content = serializedContent;
+                }
+
+                var response = _httpClient.SendAsync(request).Result;
+                responseManager.StatusCode = response.StatusCode;
+
+                if (response.IsSuccessStatusCode)
+                {
+                    string jsonResponse = response.Content.ReadAsStringAsync().Result;
+
+                    JsonSerializerSettings settings = new JsonSerializerSettings();
+                    settings.MissingMemberHandling = MissingMemberHandling.Ignore;
+                    responseManager.Content = JsonConvert.DeserializeObject<TResponse>(jsonResponse, settings);
+                    responseManager.IsSuccess = true;
+                }
+                else
+                {
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        UnauthorizedResponseReceived?.Invoke(response);
+
+                        if (methodToRefreshToken != null)
+                        {
+                            if (!hasRetried) // Verifica si no se ha intentado un reintento antes
+                            {
+                                //Refrescamos el token y reintentamos la solicitud
+                                var token = methodToRefreshToken();
+                                if (!string.IsNullOrEmpty(token))
+                                {
+                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                                    SetAuthorizationToken(token);
+                                    hasRetried = true;
+                                    return SendRequest<TResponse>(endpoint, method, content, contentType);
+                                }
+                            }
+                            else
+                            {
+                                UnauthorizedRetriedResponseReceived?.Invoke(response);
+                            }
+
+                            responseManager.Message = "error al refrescar token";
+                        }
+                    }
+                    else
+                    {
+                        responseManager.Message = response.ReasonPhrase;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                responseManager.StatusCode = HttpStatusCode.BadRequest;
+                responseManager.Message = GetMessageFromException(ex);
+            }
+
+            return responseManager;
+        }
+
         private async Task<ClientResponse<TResponse>> SendRequestAsync<TResponse>(string endpoint, HttpMethod method, object content, EContentType contentType)
         {
             ClientResponse<TResponse> responseManager = new ClientResponse<TResponse>();
@@ -129,7 +207,10 @@ namespace WebServiceClientManager
                 if (response.IsSuccessStatusCode)
                 {
                     string jsonResponse = await response.Content.ReadAsStringAsync();
-                    responseManager.Content = JsonConvert.DeserializeObject<TResponse>(jsonResponse);
+
+                    JsonSerializerSettings settings = new JsonSerializerSettings();
+                    settings.MissingMemberHandling = MissingMemberHandling.Ignore;
+                    responseManager.Content = JsonConvert.DeserializeObject<TResponse>(jsonResponse, settings);
                     responseManager.IsSuccess = true;
                 }
                 else
@@ -138,12 +219,12 @@ namespace WebServiceClientManager
                     {
                         UnauthorizedResponseReceived?.Invoke(response);
 
-                        if (tokenRefreshFuncAsync != null)
+                        if (methodToRefreshTokenAsync != null)
                         {
                             if (!hasRetried) // Verifica si no se ha intentado un reintento antes
                             {
                                 //Refrescamos el token y reintentamos la solicitud
-                                var token = await tokenRefreshFuncAsync();
+                                var token = await methodToRefreshTokenAsync();
                                 if (!string.IsNullOrEmpty(token))
                                 {
                                     _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
