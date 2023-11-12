@@ -311,7 +311,7 @@ namespace WebServiceClientManager
             return content;
         }
 
-        public string CreateQueryParameters(object parametros)
+        public string GenerateQueryParamsFromObject(object parametros)
         {
             var properties = parametros.GetType().GetProperties();
             var queryString = HttpUtility.ParseQueryString(string.Empty);

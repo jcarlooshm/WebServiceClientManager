@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Net.Http;
 using System.Threading.Tasks;
-using WebServiceClientManager.Enums;
 using WebServiceClientManager.Models;
 
 namespace WebServiceClientManager.Interfaces
@@ -11,7 +10,7 @@ namespace WebServiceClientManager.Interfaces
         event Action<HttpResponseMessage> UnauthorizedResponseReceived;
         event Action<HttpResponseMessage> UnauthorizedRetriedResponseReceived;
 
-        string CreateQueryParameters(object parametros);
+        string GenerateQueryParamsFromObject(object parametros);
         ClientResponse<TResponse> Delete<TResponse>(string endpoint);
         Task<ClientResponse<TResponse>> DeleteAsync<TResponse>(string endpoint);
         ClientResponse<TResponse> Get<TResponse>(string endpoint);
