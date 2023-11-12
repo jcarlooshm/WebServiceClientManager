@@ -7,7 +7,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Web;
 using System;
-using WebServiceClientManager.Enums;
 using WebServiceClientManager.Interfaces;
 using WebServiceClientManager.Models;
 using Newtonsoft.Json;
@@ -16,17 +15,17 @@ namespace WebServiceClientManager
 {
     public class WebServiceClient : IWebServiceClient
     {
-        private HttpClient _httpClient;
-        private string _baseUri;
-        private string _authorizationToken;
-
+        public event Action<HttpResponseMessage> UnauthorizedResponseReceived;
+        public event Action<HttpResponseMessage> UnauthorizedRetriedResponseReceived;
+        
         private Func<string> methodToRefreshToken;
         private Func<Task<string>> methodToRefreshTokenAsync;
 
+        private string _authorizationToken;
+        private string _baseUri;
 
-        public event Action<HttpResponseMessage> UnauthorizedResponseReceived;
-        public event Action<HttpResponseMessage> UnauthorizedRetriedResponseReceived;
-
+        public string AuthorizationType { get; set; } = "Bearer";
+        private HttpClient _httpClient;
 
         public WebServiceClient(string baseUrl)
         {
@@ -41,7 +40,7 @@ namespace WebServiceClientManager
 
             if (_httpClient == null)
                 _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _authorizationToken);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, _authorizationToken);
         }
 
         public void SetAuthorizationToken(string authorizationToken)
@@ -50,7 +49,7 @@ namespace WebServiceClientManager
 
             if (_httpClient == null)
                 _httpClient = new HttpClient();
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _authorizationToken);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, _authorizationToken);
         }
 
         public void MethodToRefreshToken(Func<string> methodToRefreshToken)
@@ -69,6 +68,11 @@ namespace WebServiceClientManager
             return SendRequest<TResponse>(endpoint, HttpMethod.Get, null, EContentType.application_json);
         }
 
+        public ClientResponse<TResponse> Get<TResponse>(string endpoint, object content, EContentType contentType)
+        {
+            return SendRequest<TResponse>(endpoint, HttpMethod.Get, content, contentType);
+        }
+
         public ClientResponse<TResponse> Post<TResponse>(string endpoint, object content, EContentType contentType)
         {
             return SendRequest<TResponse>(endpoint, HttpMethod.Post, content, contentType);
@@ -84,6 +88,11 @@ namespace WebServiceClientManager
             return SendRequest<TResponse>(endpoint, HttpMethod.Delete, null, EContentType.application_json);
         }
 
+        public ClientResponse<TResponse> Delete<TResponse>(string endpoint, object content, EContentType contentType)
+        {
+            return SendRequest<TResponse>(endpoint, HttpMethod.Delete, content, contentType);
+        }
+
         public ClientResponse<TResponse> Patch<TResponse>(string endpoint, object content, EContentType contentType)
         {
             return SendRequest<TResponse>(endpoint, new HttpMethod("PATCH"), content, contentType);
@@ -94,6 +103,11 @@ namespace WebServiceClientManager
         public async Task<ClientResponse<TResponse>> GetAsync<TResponse>(string endpoint)
         {
             return await SendRequestAsync<TResponse>(endpoint, HttpMethod.Get, null, EContentType.application_json);
+        }
+
+        public async Task<ClientResponse<TResponse>> GetAsync<TResponse>(string endpoint, object content, EContentType contentType)
+        {
+            return await SendRequestAsync<TResponse>(endpoint, HttpMethod.Get, content, contentType);
         }
 
         public async Task<ClientResponse<TResponse>> PostAsync<TResponse>(string endpoint, object content, EContentType contentType)
@@ -109,6 +123,11 @@ namespace WebServiceClientManager
         public async Task<ClientResponse<TResponse>> DeleteAsync<TResponse>(string endpoint)
         {
             return await SendRequestAsync<TResponse>(endpoint, HttpMethod.Delete, null, EContentType.application_json);
+        }
+
+        public async Task<ClientResponse<TResponse>> DeleteAsync<TResponse>(string endpoint, object content, EContentType contentType)
+        {
+            return await SendRequestAsync<TResponse>(endpoint, HttpMethod.Delete, content, contentType);
         }
 
         public async Task<ClientResponse<TResponse>> PatchAsync<TResponse>(string endpoint, object content, EContentType contentType)
@@ -157,7 +176,7 @@ namespace WebServiceClientManager
                                 var token = methodToRefreshToken();
                                 if (!string.IsNullOrEmpty(token))
                                 {
-                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
                                     SetAuthorizationToken(token);
                                     hasRetried = true;
                                     return SendRequest<TResponse>(endpoint, method, content, contentType);
@@ -227,7 +246,7 @@ namespace WebServiceClientManager
                                 var token = await methodToRefreshTokenAsync();
                                 if (!string.IsNullOrEmpty(token))
                                 {
-                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
                                     SetAuthorizationToken(token);
                                     hasRetried = true;
                                     return await SendRequestAsync<TResponse>(endpoint, method, content, contentType);

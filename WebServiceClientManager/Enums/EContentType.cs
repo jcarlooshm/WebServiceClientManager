@@ -1,4 +1,4 @@
-﻿namespace WebServiceClientManager.Enums
+﻿namespace WebServiceClientManager
 {
     public enum EContentType
     {
