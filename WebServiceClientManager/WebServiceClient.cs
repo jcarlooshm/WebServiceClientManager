@@ -27,7 +27,8 @@ namespace WebServiceClientManager
         public string AuthorizationType { get; set; } = "Bearer";
         private HttpClient _httpClient;
 
-        private readonly ITokenManager _tokenManager;
+        private readonly ITokenHandler _tokenManager;
+        private readonly ITokenRefreshHandler _tokenRefreshHandler;
 
         public WebServiceClient(string baseUrl)
         {
@@ -35,11 +36,19 @@ namespace WebServiceClientManager
             this._httpClient = new HttpClient();
         }
 
-        public WebServiceClient(string baseUrl, ITokenManager tokenManager)
+        public WebServiceClient(string baseUrl, ITokenHandler tokenManager)
         {
             this._baseUri = baseUrl;
             this._httpClient = new HttpClient();
             _tokenManager = tokenManager;
+        }
+
+        public WebServiceClient(string baseUrl, ITokenHandler tokenManager, ITokenRefreshHandler tokenRefreshHandler)
+        {
+            this._baseUri = baseUrl;
+            this._httpClient = new HttpClient();
+            _tokenManager = tokenManager;
+            _tokenRefreshHandler = tokenRefreshHandler ?? throw new ArgumentNullException(nameof(tokenRefreshHandler));
         }
 
         public WebServiceClient(string baseUri, string authorizationToken)
@@ -177,27 +186,32 @@ namespace WebServiceClientManager
                     {
                         UnauthorizedResponseReceived?.Invoke(response);
 
-                        if (methodToRefreshToken != null)
+                        bool refreshConfigured = methodToRefreshToken != null || _tokenRefreshHandler != null;
+                        string token = "";
+                        if (methodToRefreshToken != null && !hasRetried)
+                            token = methodToRefreshToken();
+
+                        if (_tokenRefreshHandler != null && !hasRetried)
+                            token = _tokenRefreshHandler.RefreshToken();
+
+                        if (refreshConfigured)
                         {
-                            if (!hasRetried) // Verifica si no se ha intentado un reintento antes
+                            if (!hasRetried && !string.IsNullOrEmpty(token)) // Verifica si no se ha realizado un reintento antes
                             {
                                 //Refrescamos el token y reintentamos la solicitud
-                                var token = methodToRefreshToken();
-                                if (!string.IsNullOrEmpty(token))
-                                {
-                                    _tokenManager.SetToken(token);
-                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
-                                    SetAuthorizationToken(token);
-                                    hasRetried = true;
-                                    return SendRequest<TResponse>(endpoint, method, content, contentType);
-                                }
+                                hasRetried = true;
+                                _tokenManager.SetToken(token);
+                                SetAuthorizationToken(token);
+                                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
+                                return SendRequest<TResponse>(endpoint, method, content, contentType);
+
                             }
                             else
                             {
                                 UnauthorizedRetriedResponseReceived?.Invoke(response);
+                                if(string.IsNullOrEmpty(token))
+                                    responseManager.Message = "error al refrescar token";
                             }
-
-                            responseManager.Message = "error al refrescar token";
                         }
                     }
                     else
@@ -248,27 +262,30 @@ namespace WebServiceClientManager
                     {
                         UnauthorizedResponseReceived?.Invoke(response);
 
-                        if (methodToRefreshTokenAsync != null)
+                        bool refreshConfigured = methodToRefreshToken != null || _tokenRefreshHandler != null;
+                        string token = "";
+                        if (methodToRefreshToken != null && !hasRetried)
+                            token = methodToRefreshToken();
+
+                        if (_tokenRefreshHandler != null && !hasRetried)
+                            token = _tokenRefreshHandler.RefreshToken();
+
+                        if (refreshConfigured)
                         {
-                            if (!hasRetried) // Verifica si no se ha intentado un reintento antes
+                            if (!hasRetried && !string.IsNullOrEmpty(token)) // Verifica si no se ha intentado un reintento antes
                             {
-                                //Refrescamos el token y reintentamos la solicitud
-                                var token = await methodToRefreshTokenAsync();
-                                if (!string.IsNullOrEmpty(token))
-                                {
-                                    _tokenManager.SetToken(token);
-                                    _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
-                                    SetAuthorizationToken(token);
-                                    hasRetried = true;
-                                    return await SendRequestAsync<TResponse>(endpoint, method, content, contentType);
-                                }
+                                hasRetried = true;
+                                _tokenManager.SetToken(token);
+                                SetAuthorizationToken(token);
+                                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(AuthorizationType, token);
+                                return await SendRequestAsync<TResponse>(endpoint, method, content, contentType);
                             }
                             else
                             {
                                 UnauthorizedRetriedResponseReceived?.Invoke(response);
+                                if (string.IsNullOrEmpty(token))
+                                    responseManager.Message = "error al refrescar token";
                             }
-
-                            responseManager.Message = "error al refrescar token";
                         }
                     }
                     else
